@@ -11,12 +11,15 @@
 
 String strSerialInput = "";
 HardwareTimer *MyTim = new HardwareTimer(TIM3);
-volatile boolean bolSerialLapse = 0; // This var is prevent serial lockups
+volatile bool bolSerialLapse = 0; // This var is prevent serial lockups
 
-void IT_Callback_Serial_Meem(void);
+void fnvdSerialTimerCallback(void);
 void I2C_Scan(void);
 void failState(const char * s);
-
+void fnvdInitDisplay();
+void fnvdInitNfc();
+void fnvdInitSerialTimer();
+void fnvdExitSetup();
 
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -32,60 +35,32 @@ void setup(){
   SerialUSB.begin(9600);
   while(!SerialUSB);
 
-  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
-  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3C for 128x32
-    SerialUSB.println(F("SSD1306 allocation failed"));
-    for(;;); // Don't proceed, loop forever
-  }
-
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0, 10);
-  display.setTextWrap(true);
-  display.println("In bootup");
-  display.display();
-
+  fnvdInitDisplay();
 
   const char uri_write_message[] = "st.com/st25";       // Uri message to write in the tag
   const char uri_write_protocol[] = URI_ID_0x01_STRING; // Uri protocol to write in the tag
   String uri_write = String(uri_write_protocol) + String(uri_write_message);
   String uri_read;
 
-  // The wire instance used can be omited in case you use default Wire instance
-  if(st25dv.begin(INT_PIN, LED_PIN, &WireNFC) == 0) {
-    display.println("System Init done!");
-  } else {
-    display.println("System Init failed!");
-    while(1);
-  }
+  fnvdInitNfc();
 
-  // st25dv.begin(INT_PIN, 255);
-  // if(!st25dv.writeURI(URI_ID_0x03_STRING, "curlyboi.online", "test info i guess lamo") == 0){
-  //   while(1);
-  // }
-  
+  fnvdInitSerialTimer();
 
-  MyTim->setOverflow(1000000, MICROSEC_FORMAT);
-  MyTim->attachInterrupt(IT_Callback_Serial_Meem);
-  MyTim->resume();
-
-  display.print("Exiting bootup");
-  display.display();
-  delay(500);
-  display.clearDisplay();
-  display.display();
+  fnvdExitSetup();
 }
 
 void loop(){
    if(SerialUSB.available()){
-     display.clearDisplay();
-     display.setCursor(0,0);
-     strSerialInput = SerialUSB.readStringUntil('\n');
-     SerialUSB.print("Input was: "); SerialUSB.println(strSerialInput);
-     display.print(strSerialInput);
-     display.display();
-   }else{
+      display.clearDisplay();
+      display.setCursor(0,0);
+      strSerialInput = SerialUSB.readStringUntil('\n');
+      SerialUSB.print("Input was: "); SerialUSB.println(strSerialInput);
+      display.println(strSerialInput);
+      if(st25dv.writeURI(URI_ID_0x03_STRING, strSerialInput.c_str(), "")){
+        display.println("Write failed!");
+      }
+      display.display();
+  }else{
      if(bolSerialLapse == 1){
        SerialUSB.println("No usb serial input");
        bolSerialLapse = 0;
@@ -93,35 +68,11 @@ void loop(){
    }
 }
 
-
-// void setup() {
-//   SerialUSB.begin(9600);
-//   while(!SerialUSB);
-//   MyTim->setOverflow(1000000, MICROSEC_FORMAT);
-//   MyTim->attachInterrupt(IT_Callback_Serial_Meem);
-//   MyTim->resume();
-// }
-
-
-
-// void loop() {  
-//   if(SerialUSB.available()){
-//     strSerialInput = SerialUSB.readString();
-//     SerialUSB.print("Input was: "); SerialUSB.println(strSerialInput);
-//   }else{
-//     if(bolSerialLapse == 1){
-//       SerialUSB.println("No input");
-//       bolSerialLapse = 0;
-//     }
-//   }
-// }
-
-
 /**
  * @brief Callback for USB Serial message to prevent lockups
  * 
  */
-void IT_Callback_Serial_Meem(void){
+void fnvdSerialTimerCallback(void){
   bolSerialLapse = 1;
 }
 
@@ -186,4 +137,60 @@ void failState(const char * s){
     SerialUSB.printf("System has failed at: %s", s); 
     delay(1000);
   }
+}
+
+/**
+ * @brief Inits the display
+ * 
+ */
+void fnvdInitDisplay(){
+    // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3C for 128x32
+    SerialUSB.println(F("SSD1306 allocation failed"));
+    for(;;); // Don't proceed, loop forever
+  }
+
+  display.clearDisplay();
+  display.setRotation(2);
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 0);
+  display.setTextWrap(true);
+  display.println("In bootup");
+  display.display();
+}
+
+/**
+ * @brief Inits the nfc reader
+ * 
+ */
+void fnvdInitNfc(){
+  if(st25dv.begin(INT_PIN, LED_PIN, &WireNFC) == 0) {
+    display.println("System Init done!");
+  } else {
+    display.println("System Init failed!");
+    while(1);
+  }
+}
+
+/**
+ * @brief Sets up the timer for the usb serial interface
+ * 
+ */
+void fnvdInitSerialTimer(){
+  MyTim->setOverflow(1000000, MICROSEC_FORMAT);
+  MyTim->attachInterrupt(fnvdSerialTimerCallback);
+  MyTim->resume();
+}
+
+/**
+ * @brief Finishes the setup and clears the display
+ * 
+ */
+void fnvdExitSetup(){
+  display.print("Exiting bootup");
+  display.display();
+  delay(2000);
+  display.clearDisplay();
+  display.display();
 }
