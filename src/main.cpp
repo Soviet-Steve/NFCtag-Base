@@ -6,7 +6,8 @@
 #define LED_PIN PC_13
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
-
+#define SerialPort SerialUSB
+#define WireNFC Wire
 
 String strSerialInput = "";
 HardwareTimer *MyTim = new HardwareTimer(TIM3);
@@ -42,7 +43,7 @@ void setup(){
   display.setTextColor(WHITE);
   display.setCursor(0, 10);
   display.setTextWrap(true);
-  display.print("In bootup");
+  display.println("In bootup");
   display.display();
 
 
@@ -52,10 +53,10 @@ void setup(){
   String uri_read;
 
   // The wire instance used can be omited in case you use default Wire instance
-  if(st25dv.begin(GPO_PIN, LPD_PIN, &WireNFC) == 0) {
-    SerialPort.println("System Init done!");
+  if(st25dv.begin(INT_PIN, LED_PIN, &WireNFC) == 0) {
+    display.println("System Init done!");
   } else {
-    SerialPort.println("System Init failed!");
+    display.println("System Init failed!");
     while(1);
   }
 
@@ -70,6 +71,9 @@ void setup(){
   MyTim->resume();
 
   display.print("Exiting bootup");
+  display.display();
+  delay(500);
+  display.clearDisplay();
   display.display();
 }
 
