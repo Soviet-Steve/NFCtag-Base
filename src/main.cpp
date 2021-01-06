@@ -1,4 +1,9 @@
 #include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include "ST25DVSensor.h"
+#include "extendedNFC.h"
 
 #define SDA_PIN PB7
 #define SCL_PIN PB6
@@ -9,6 +14,7 @@
 #define SerialPort SerialUSB
 #define WireNFC Wire
 
+String strNfcInput = "";
 String strSerialInput = "";
 HardwareTimer *MyTim = new HardwareTimer(TIM3);
 volatile bool bolSerialLapse = 0; // This var is prevent serial lockups
@@ -20,11 +26,9 @@ void fnvdInitDisplay();
 void fnvdInitNfc();
 void fnvdInitSerialTimer();
 void fnvdExitSetup();
+void fnvdSendNfc();
+void fnvdRecieveNfc();
 
-#include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-#include "ST25DVSensor.h"
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
@@ -40,7 +44,7 @@ void setup(){
   const char uri_write_message[] = "st.com/st25";       // Uri message to write in the tag
   const char uri_write_protocol[] = URI_ID_0x01_STRING; // Uri protocol to write in the tag
   String uri_write = String(uri_write_protocol) + String(uri_write_message);
-  String uri_read;
+  
 
   fnvdInitNfc();
 
@@ -51,21 +55,14 @@ void setup(){
 
 void loop(){
    if(SerialUSB.available()){
-      display.clearDisplay();
-      display.setCursor(0,0);
-      strSerialInput = SerialUSB.readStringUntil('\n');
-      SerialUSB.print("Input was: "); SerialUSB.println(strSerialInput);
-      display.println(strSerialInput);
-      if(st25dv.writeURI(URI_ID_0x03_STRING, strSerialInput.c_str(), "")){
-        display.println("Write failed!");
-      }
-      display.display();
+    // fnvdSendNfc();
   }else{
-     if(bolSerialLapse == 1){
-       SerialUSB.println("No usb serial input");
-       bolSerialLapse = 0;
-     }
-   }
+    if(bolSerialLapse == 1){ // Timer wait
+      //  SerialUSB.println("No usb serial input");
+      fnvdRecieveNfc();
+    bolSerialLapse = 0;
+    }
+  }
 }
 
 /**
@@ -193,4 +190,43 @@ void fnvdExitSetup(){
   delay(2000);
   display.clearDisplay();
   display.display();
+}
+
+/**
+ * @brief Sends a Url over nfc
+ * 
+ */
+void fnvdSendNfc(){
+  display.clearDisplay();
+  display.setCursor(0,0);
+  strSerialInput = SerialUSB.readStringUntil('\n');
+  SerialUSB.print("Input was: "); SerialUSB.println(strSerialInput);
+  display.println(strSerialInput);
+  if(st25dv.writeURI(URI_ID_0x03_STRING, strSerialInput.c_str(), "")){
+    display.println("Write failed!");
+  }
+  display.display();
+}
+
+/**
+ * @brief Recieves a message over nfc
+ * 
+ */
+void fnvdRecieveNfc(){
+  String uri_read;
+  if(st25dv.readURI(&uri_read)){
+        display.clearDisplay();
+        display.setCursor(0,0);
+        display.println("Read Failed");
+        display.display();
+  }else{
+    if(strNfcInput != uri_read){
+      strNfcInput = uri_read;
+      display.clearDisplay();
+      display.setCursor(0,0);
+      display.println(uri_read);
+      SerialUSB.print("Input text was: "); SerialUSB.print(uri_read);
+      display.display();
+    }
+  }
 }
