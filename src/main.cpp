@@ -5,10 +5,21 @@
 #include "ST25DVSensor.h"
 #include "extendedNFC.h"
 
+#include <SPI.h>              // include libraries
+#include <LoRa.h>
+
 #define SDA_PIN PB7
 #define SCL_PIN PB6
 #define INT_PIN PB5
 #define LED_PIN PC_13
+#define MOSI_PIN PA7
+#define MISO_PIN PA6
+#define CLK_PIN PA5
+#define LORA_CS_PIN PA4
+#define LORA_RST_PIN PA3
+#define LORA_INT_PIN PA2
+
+#define LORA_FREQ 915E6
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
 #define SerialPort SerialUSB
@@ -29,6 +40,13 @@ void fnvdExitSetup();
 void fnvdSendNfc();
 void fnvdRecieveNfc();
 
+void LoRa_rxMode();
+void LoRa_txMode();
+void LoRa_sendMessage(String message);
+void onReceive(int packetSize);
+void onTxDone();
+bool runEvery(unsigned long interval);
+
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
@@ -39,14 +57,22 @@ void setup(){
   SerialUSB.begin(9600);
   while(!SerialUSB);
 
-  fnvdInitDisplay();
 
-  const char uri_write_message[] = "st.com/st25";       // Uri message to write in the tag
-  const char uri_write_protocol[] = URI_ID_0x01_STRING; // Uri protocol to write in the tag
-  String uri_write = String(uri_write_protocol) + String(uri_write_message);
-  
 
-  fnvdInitNfc();
+  fnvdInitDisplay();  
+  // SPI.begin();
+  // SPI.setClockDivider(SPI_CLOCK_DIV16);
+  // LoRa.setPins(LORA_CS_PIN, LORA_RST_PIN, LORA_INT_PIN);
+
+  // if(!LoRa.begin((const long)LORA_FREQ)){
+  //   SerialUSB.println("LoRa init failed");
+  //   display.println("LoRa init failed");
+  //   while(1);
+  // }
+
+  // LoRa.onReceive(onReceive);
+
+  // fnvdInitNfc();
 
   fnvdInitSerialTimer();
 
@@ -54,6 +80,15 @@ void setup(){
 }
 
 void loop(){
+  // if(runEvery(1000)){
+  //   String message = "HeLoRa World! ";
+  //   message += "I'm a Node! ";
+  //   message += millis();
+
+  //   LoRa_sendMessage(message); // send a message
+
+  //   SerialPort.println("Send Message!");
+  // }
    if(SerialUSB.available()){
     // fnvdSendNfc();
   }else{
@@ -229,4 +264,77 @@ void fnvdRecieveNfc(){
       display.display();
     }
   }
+}
+
+/**
+ * @brief Allows the MCU to wait for lora messages via interrupt
+ * 
+ */
+void LoRa_rxMode(){
+  LoRa.enableInvertIQ();                // active invert I and Q signals
+  LoRa.receive();                       // set receive mode
+}
+
+/**
+ * @brief Allows the lora radio to send without being affected by interrupts
+ * 
+ */
+void LoRa_txMode(){
+  LoRa.idle();                          // set standby mode
+  LoRa.disableInvertIQ();               // normal mode
+}
+
+/**
+ * @brief Sends a string over lora
+ * 
+ * @param message Input string to be transmitted
+ */
+void LoRa_sendMessage(String message) {
+  LoRa_txMode();                        // set tx mode
+  LoRa.beginPacket();                   // start packet
+  LoRa.print(message);                  // add payload
+  LoRa.endPacket(true);                 // finish packet and send it
+}
+
+/**
+ * @brief The interrupt callback for lora in
+ * 
+ * @param packetSize ???
+ */
+void onReceive(int packetSize) {
+  String message = "";
+
+  while (LoRa.available()) {
+    message += (char)LoRa.read();
+  }
+
+  SerialPort.print("Node Receive: ");
+  SerialPort.println(message);
+}
+
+/**
+ * @brief Callback for sent message
+ * 
+ */
+void onTxDone() {
+  SerialPort.println("TxDone");
+  LoRa_rxMode();
+}
+
+/**
+ * @brief Defines when messages are sent
+ * 
+ * @param interval The interval time
+ * @return bool Whether the interval is within params
+ */
+bool runEvery(unsigned long interval)
+{
+  static unsigned long previousMillis = 0;
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis >= interval)
+  {
+    previousMillis = currentMillis;
+    return true;
+  }
+  return false;
 }
