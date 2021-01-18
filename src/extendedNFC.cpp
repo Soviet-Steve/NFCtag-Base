@@ -3,6 +3,8 @@
 #ifndef NFC_NEW_LIB
 #define NFC_NEW_LIB
 
+nfcReader nfc;
+
 int nfcReader::readText(String *s){
     uint16_t ret;
     NDEF_Text_info_t text = {NDEF_TEXT_UTF8, "", ""};
@@ -25,6 +27,10 @@ int nfcReader::readText(String *s){
     *s = String(text.text);
 
     return 0;
+}
+
+int nfcReader::writeText(String message){
+    return NDEF_WriteText((char *)message.c_str());
 }
 
 #endif

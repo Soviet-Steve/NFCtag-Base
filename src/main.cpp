@@ -5,11 +5,13 @@
 #include "ST25DVSensor.h"
 #include "extendedNFC.h"
 
+#include <SoftwareSerial.h>
+
 #include <SPI.h>              // include libraries
 #include <LoRa.h>
 
-#define SDA_PIN PB7
-#define SCL_PIN PB6
+#define SDA_PIN PB9
+#define SCL_PIN PB7
 #define INT_PIN PB5
 #define LED_PIN PC_13
 #define MOSI_PIN PA7
@@ -19,6 +21,8 @@
 #define LORA_RST_PIN PA3
 #define LORA_INT_PIN PA2
 
+
+#define GPS_BAUD 9600
 #define LORA_FREQ 915E6
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
@@ -28,7 +32,11 @@
 String strNfcInput = "";
 String strSerialInput = "";
 HardwareTimer *MyTim = new HardwareTimer(TIM3);
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
 volatile bool bolSerialLapse = 0; // This var is prevent serial lockups
+
+SoftwareSerial gpsSerial(PB7, PB6);
 
 void fnvdSerialTimerCallback(void);
 void I2C_Scan(void);
@@ -48,35 +56,52 @@ void onTxDone();
 bool runEvery(unsigned long interval);
 
 
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
 
 
 
 
 void setup(){
   SerialUSB.begin(9600);
-  while(!SerialUSB);
+  while(!SerialUSB); // Holds the system from running until the serial port has been connected
+  Serial1.setTx(PB6);
+  Serial1.setRx(PB7);
+  Serial1.begin(GPS_BAUD);
+  // gpsSerial.begin(GPS_BAUD);
 
-
-
-  fnvdInitDisplay();  
-  // SPI.begin();
-  // SPI.setClockDivider(SPI_CLOCK_DIV16);
-  // LoRa.setPins(LORA_CS_PIN, LORA_RST_PIN, LORA_INT_PIN);
-
-  // if(!LoRa.begin((const long)LORA_FREQ)){
-  //   SerialUSB.println("LoRa init failed");
-  //   display.println("LoRa init failed");
-  //   while(1);
+  // fnvdInitDisplay();  
+  // for(int i = 0; i < 10000; i++){
+  //   // delay(1);
+  //   if(!(!SerialUSB)){
+  //     display.println("Starting with Serial");
+  //     break;
+  //   }
+  //   if(!SerialUSB && i == 150){
+  //     display.println("Starting without Serial");
+  //     break;
+  //   }
   // }
+
+
+  SPI.begin();
+  SPI.setClockDivider(SPI_CLOCK_DIV16);
+  LoRa.setPins(LORA_CS_PIN, LORA_RST_PIN, LORA_INT_PIN);
+
+  if(!LoRa.begin((const long)LORA_FREQ)){
+    SerialUSB.println("LoRa init failed");
+    // display.println("LoRa init failed");
+    while(1);
+  }else{
+    SerialUSB.println("LoRa init Passed");
+  }
 
   // LoRa.onReceive(onReceive);
 
-  // fnvdInitNfc();
+  fnvdInitNfc();
 
   fnvdInitSerialTimer();
 
-  fnvdExitSetup();
+  // fnvdExitSetup();
 }
 
 void loop(){
@@ -89,12 +114,15 @@ void loop(){
 
   //   SerialPort.println("Send Message!");
   // }
-   if(SerialUSB.available()){
-    // fnvdSendNfc();
+  if(SerialUSB.available()){
+    fnvdSendNfc();
   }else{
-    if(bolSerialLapse == 1){ // Timer wait
+    if(/*bolSerialLapse == */1){ // Timer wait
+      if(Serial1.available() > 0){
+        SerialUSB.write(Serial1.read());
+      }
       //  SerialUSB.println("No usb serial input");
-      fnvdRecieveNfc();
+      // fnvdRecieveNfc();
     bolSerialLapse = 0;
     }
   }
@@ -197,10 +225,13 @@ void fnvdInitDisplay(){
  * 
  */
 void fnvdInitNfc(){
-  if(st25dv.begin(INT_PIN, LED_PIN, &WireNFC) == 0) {
-    display.println("System Init done!");
+  // if(st25dv.begin(INT_PIN, LED_PIN, &WireNFC) == 0) {
+  if(nfc.begin(INT_PIN, LED_PIN, &WireNFC)){
+    SerialUSB.println("NFC Init done!");
+    // display.println("System Init done!");
   } else {
-    display.println("System Init failed!");
+    SerialUSB.println("NFC Init failed!");
+    // display.println("System Init failed!");
     while(1);
   }
 }
@@ -237,8 +268,11 @@ void fnvdSendNfc(){
   strSerialInput = SerialUSB.readStringUntil('\n');
   SerialUSB.print("Input was: "); SerialUSB.println(strSerialInput);
   display.println(strSerialInput);
-  if(st25dv.writeURI(URI_ID_0x03_STRING, strSerialInput.c_str(), "")){
-    display.println("Write failed!");
+  // if(st25dv.writeURI(URI_ID_0x03_STRING, strSerialInput.c_str(), "")){
+  // int error_code = nfc.writeText(strSerialInput);
+  int error_code = nfc.writeURI(URI_ID_0x03_STRING, strSerialInput.c_str(), "");
+  if(error_code){
+    display.printf("Write failed!: %d\n", error_code);
   }
   display.display();
 }
@@ -260,7 +294,7 @@ void fnvdRecieveNfc(){
       display.clearDisplay();
       display.setCursor(0,0);
       display.println(uri_read);
-      SerialUSB.print("Input text was: "); SerialUSB.print(uri_read);
+      SerialUSB.print("Input text was: "); SerialUSB.println(uri_read);
       display.display();
     }
   }
