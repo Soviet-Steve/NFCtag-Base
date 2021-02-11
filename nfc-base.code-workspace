@@ -2,7 +2,20 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"name": "Lora-Test",
+			"path": "..\\..\\..\\..\\..\\PlatformIO\\Projects\\Lora-Test"
+		},
+		{
+			"name": "ArduinoModuleGateway",
+			"path": "..\\..\\..\\..\\..\\PlatformIO\\Projects\\ArduinoModuleGateway"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"files.associations": {
+			"*.tcc": "cpp",
+			"system_error": "cpp"
+		}
+	}
 }
